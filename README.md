@@ -23,7 +23,9 @@ The UI dev server proxies `/api/*` to the API on port 4000, so open http://local
 `.mcp.json` at the repo root configures three MCP servers for Claude Code:
 
 - **git** — local git operations for this repo, via `uvx mcp-server-git`. No setup needed beyond having `uv`/`uvx` installed.
-- **atlassian** — Atlassian's remote MCP server (Jira/Confluence). Authenticates via browser OAuth the first time you use it (run `/mcp` in Claude Code and follow the prompt) — no token needed in config.
+- **jira** — [mcp-atlassian](https://github.com/sooperset/mcp-atlassian), pointed at the self-hosted Jira instance at `https://jiraeu.epam.com` (username + API token auth, not Atlassian Cloud OAuth). Requires these environment variables set before starting Claude Code:
+  - `JIRA_USERNAME` — your Jira username
+  - `JIRA_TOKEN` — your Jira API token
 - **github** — the official GitHub MCP server, run via Docker. Requires Docker, and these environment variables set before starting Claude Code:
   - `GITHUB_TOKEN` — a GitHub personal access token
   - `GITHUB_USERNAME` — your GitHub username

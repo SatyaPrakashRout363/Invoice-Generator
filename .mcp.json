@@ -10,7 +10,7 @@
       "env": {
         "JIRA_URL": "https://jiraeu.epam.com",
         "JIRA_USERNAME": "${JIRA_USERNAME}",
-        "JIRA_API_TOKEN": "${JIRA_TOKEN}"
+        "JIRA_API_TOKEN": "${JIRA_PASSWORD}"
       }
     },
     "github": {

@@ -247,4 +247,31 @@ If you want, I can now:
 - Commit and push the architecture document to `main`, or
 - Generate a simple sequence/component PNG from the mermaid diagrams and add to the repo.
 
-What would you like next?
+## Design Review Summary (findings & agreed decisions)
+
+- Review date: 2026-08-12
+- Reviewer: Senior Architect
+
+Key Risks & Mitigations
+
+- Audit storage growth: partition `audit_log` by year (or month for high-volume) and implement an archival/purge pipeline to satisfy the 7-year retention requirement. Consider moving >7y data to encrypted object storage (S3) with restricted access.
+- Scheduler scalability and contention: implement keyset-pagination and small batch sizes for the daily job. Consider queueing updates (Redis/BullMQ) for controlled write throughput.
+- Failure & retry behavior: make audit writes resilient with retries and idempotency keys; on repeated failures record incidents and alert.
+- Concurrency: enforce optimistic locking (version column) and return HTTP 409 with retry guidance for conflicting updates.
+- Security & compliance: require encryption-at-rest for audit data and server-side RBAC for audit access; log audit access events.
+
+Agreed Design Decisions
+
+- Use Postgres for primary data and partitioned `audit_log` table for audit entries.
+- Store audit entries in a separate `audit_log` schema/table with indexes on `(invoice_id, created_at)`.
+- Scheduler uses batched keyset-pagination; for scale, move to worker-queue model.
+- Admin-only RBAC enforced server-side for manual status changes and audit viewing.
+- Implement migration/backfill with batched updates and rollback support.
+
+Action Items
+
+1. Add DB partitioning and archival implementation notes and scripts to the implementation plan.
+2. Add monitoring and alerting SLOs for scheduled jobs and audit pipeline failures.
+3. Document migration runbook (batch sizes, staging verification, rollback steps).
+
+See `.github/workflows/Design/design-review.md` for a complete review log and recommended mitigations.

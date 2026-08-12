@@ -32,4 +32,4 @@ The UI dev server proxies `/api/*` to the API on port 4000, so open http://local
 
 None of these credentials are stored in `.mcp.json` — it only references the env var names, so it's safe to commit.
 
-`.github/copilot-instructions.md` documents the same Jira/GitHub/git setup for GitHub Copilot Chat in VS Code. Note that this file is guidance text only — it does not itself wire up a live MCP connection for Copilot Chat. If you also want Copilot Chat to actually connect (not just know about the setup), that needs a `.vscode/mcp.json` file, which is not included yet.
+`.github/copilot-instructions.md` documents the same Jira/GitHub/git setup for GitHub Copilot's coding agent. It's guidance text only — it does not itself wire up a live MCP connection. GitHub Copilot's coding agent runs in the cloud and cannot see local environment variables, so its credentials must instead be configured as repo secrets under `Settings → Copilot → Coding agent` on GitHub, not as local env vars and not hardcoded anywhere in this repo.

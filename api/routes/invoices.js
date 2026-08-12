@@ -1,10 +1,17 @@
 const express = require('express');
 const crypto = require('crypto');
 const PDFDocument = require('pdfkit');
-const { readInvoices, writeInvoices } = require('../utils/store');
+const { readInvoices, writeInvoices, appendAudit } = require('../utils/store');
 const { computeTotals } = require('../utils/totals');
 
 const router = express.Router();
+
+// NOTE: Placeholder admin check. Integrate real auth/role checks per implementation plan.
+function requireAdmin(req, res, next) {
+  const role = req.headers['x-user-role'];
+  if (role && role.toLowerCase() === 'admin') return next();
+  return res.status(403).json({ error: 'Admin role required' });
+}
 
 router.get('/', (req, res) => {
   const invoices = readInvoices();
@@ -34,6 +41,10 @@ router.post('/', (req, res) => {
     items: body.items,
     taxRate: Number(body.taxRate) || 0,
     notes: body.notes || '',
+    // New fields for payment-status enhancement
+    paymentStatus: 'Unpaid',
+    partial: Boolean(body.partial || false),
+    version: 1,
   };
 
   const invoices = readInvoices();
@@ -47,7 +58,12 @@ router.put('/:id', (req, res) => {
   const index = invoices.findIndex((inv) => inv.id === req.params.id);
   if (index === -1) return res.status(404).json({ error: 'Invoice not found' });
 
-  const updated = { ...invoices[index], ...req.body, id: invoices[index].id };
+  // Preserve paymentStatus/version unless explicitly provided via status endpoint
+  const incoming = { ...req.body };
+  delete incoming.paymentStatus;
+  delete incoming.version;
+
+  const updated = { ...invoices[index], ...incoming, id: invoices[index].id };
   invoices[index] = updated;
   writeInvoices(invoices);
   res.json({ ...updated, totals: computeTotals(updated) });
@@ -127,7 +143,51 @@ router.get('/:id/pdf', (req, res) => {
     doc.text(invoice.notes, 50);
   }
 
+  // Payment status display
+  doc.moveDown(2);
+  doc.fontSize(10).text(`Payment Status: ${invoice.paymentStatus || 'Unpaid'}`, 50);
+  if (invoice.partial) doc.text('Partial: Yes', 50);
+
   doc.end();
+});
+
+// Admin-only endpoint to change payment status with audit entry
+router.patch('/:id/status', requireAdmin, (req, res) => {
+  const invoices = readInvoices();
+  const index = invoices.findIndex((inv) => inv.id === req.params.id);
+  if (index === -1) return res.status(404).json({ error: 'Invoice not found' });
+
+  const invoice = invoices[index];
+  const prevStatus = invoice.paymentStatus || 'Unpaid';
+  const newStatus = req.body && req.body.paymentStatus;
+  const reason = req.body && req.body.reason;
+
+  if (!newStatus) return res.status(400).json({ error: 'paymentStatus is required' });
+
+  // Update status and version
+  invoice.paymentStatus = newStatus;
+  invoice.version = (invoice.version || 1) + 1;
+  invoices[index] = invoice;
+  writeInvoices(invoices);
+
+  // Append audit entry
+  const audit = {
+    id: crypto.randomUUID(),
+    invoiceId: invoice.id,
+    previousStatus: prevStatus,
+    newStatus: newStatus,
+    adminUserId: req.headers['x-user-id'] || 'unknown',
+    reason: reason || null,
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    appendAudit(audit);
+  } catch (e) {
+    // Log and continue
+    console.error('Failed to write audit entry', e);
+  }
+
+  res.json({ ...invoice, totals: computeTotals(invoice) });
 });
 
 module.exports = router;

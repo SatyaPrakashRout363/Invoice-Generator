@@ -1,5 +1,7 @@
 # Invoice Generator
 
+[![CI](https://github.com/SatyaPrakashRout363/Invoice-Generator/actions/workflows/ci.yml/badge.svg)](https://github.com/SatyaPrakashRout363/Invoice-Generator/actions/workflows/ci.yml)
+
 ## Run the API
 ```
 cd api

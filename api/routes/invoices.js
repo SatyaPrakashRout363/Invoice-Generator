@@ -1,21 +1,35 @@
 const express = require('express');
 const crypto = require('crypto');
-const PDFDocument = require('pdfkit');
 const { readInvoices, writeInvoices } = require('../utils/store');
 const { computeTotals } = require('../utils/totals');
+const { buildInvoicePdf } = require('../utils/pdf');
+const requireSession = require('../middleware/requireSession');
+const { loadOwnedInvoice, filterOwned } = require('../middleware/ownership');
+const { isSendRateLimited, recordSend } = require('../utils/rateLimit');
+const { sendInvoiceEmail } = require('../utils/email');
 
 const router = express.Router();
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+router.use(requireSession);
+
+function collectPdfBuffer(doc) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+}
+
 router.get('/', (req, res) => {
-  const invoices = readInvoices();
+  const invoices = filterOwned(readInvoices(), req.session.userId);
   res.json(invoices.map((inv) => ({ ...inv, totals: computeTotals(inv) })));
 });
 
-router.get('/:id', (req, res) => {
-  const invoices = readInvoices();
-  const invoice = invoices.find((inv) => inv.id === req.params.id);
-  if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-  res.json({ ...invoice, totals: computeTotals(invoice) });
+router.get('/:id', loadOwnedInvoice, (req, res) => {
+  res.json({ ...req.invoice, totals: computeTotals(req.invoice) });
 });
 
 router.post('/', (req, res) => {
@@ -26,6 +40,7 @@ router.post('/', (req, res) => {
 
   const invoice = {
     id: crypto.randomUUID(),
+    ownerId: req.session.userId,
     invoiceNumber: body.invoiceNumber,
     date: body.date || new Date().toISOString().slice(0, 10),
     dueDate: body.dueDate || '',
@@ -34,6 +49,10 @@ router.post('/', (req, res) => {
     items: body.items,
     taxRate: Number(body.taxRate) || 0,
     notes: body.notes || '',
+    deliveryStatus: 'Not Sent',
+    lastSentAt: null,
+    sendCount: 0,
+    sendHistory: [],
   };
 
   const invoices = readInvoices();
@@ -42,92 +61,86 @@ router.post('/', (req, res) => {
   res.status(201).json({ ...invoice, totals: computeTotals(invoice) });
 });
 
-router.put('/:id', (req, res) => {
-  const invoices = readInvoices();
-  const index = invoices.findIndex((inv) => inv.id === req.params.id);
-  if (index === -1) return res.status(404).json({ error: 'Invoice not found' });
+router.put('/:id', loadOwnedInvoice, (req, res) => {
+  const { invoice, invoices } = req;
+  if (invoice.deliveryStatus !== 'Not Sent' && req.body?.confirm !== true) {
+    return res.status(409).json({ error: 'confirmation_required', deliveryStatus: invoice.deliveryStatus });
+  }
 
-  const updated = { ...invoices[index], ...req.body, id: invoices[index].id };
+  const index = invoices.findIndex((inv) => inv.id === invoice.id);
+  const updated = { ...invoice, ...req.body, id: invoice.id, ownerId: invoice.ownerId };
+  delete updated.confirm;
   invoices[index] = updated;
   writeInvoices(invoices);
   res.json({ ...updated, totals: computeTotals(updated) });
 });
 
-router.delete('/:id', (req, res) => {
-  const invoices = readInvoices();
-  const index = invoices.findIndex((inv) => inv.id === req.params.id);
-  if (index === -1) return res.status(404).json({ error: 'Invoice not found' });
+router.delete('/:id', loadOwnedInvoice, (req, res) => {
+  const { invoice, invoices } = req;
+  if (invoice.deliveryStatus !== 'Not Sent' && req.body?.confirm !== true) {
+    return res.status(409).json({ error: 'confirmation_required', deliveryStatus: invoice.deliveryStatus });
+  }
 
+  const index = invoices.findIndex((inv) => inv.id === invoice.id);
   invoices.splice(index, 1);
   writeInvoices(invoices);
   res.status(204).end();
 });
 
-router.get('/:id/pdf', (req, res) => {
-  const invoices = readInvoices();
-  const invoice = invoices.find((inv) => inv.id === req.params.id);
-  if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
-
-  const { subtotal, tax, total } = computeTotals(invoice);
+router.get('/:id/pdf', loadOwnedInvoice, (req, res) => {
+  const { invoice } = req;
+  const totals = computeTotals(invoice);
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=invoice-${invoice.invoiceNumber}.pdf`);
 
-  const doc = new PDFDocument({ margin: 50 });
+  const doc = buildInvoicePdf(invoice, totals);
   doc.pipe(res);
+  doc.end();
+});
 
-  doc.fontSize(20).text('INVOICE', { align: 'right' });
-  doc.fontSize(10).text(`Invoice #: ${invoice.invoiceNumber}`, { align: 'right' });
-  doc.text(`Date: ${invoice.date}`, { align: 'right' });
-  if (invoice.dueDate) doc.text(`Due: ${invoice.dueDate}`, { align: 'right' });
-  doc.moveDown();
+router.post('/:id/send', loadOwnedInvoice, async (req, res) => {
+  const { invoice, invoices } = req;
+  const userId = req.session.userId;
 
-  doc.fontSize(12).text('From:', { continued: false });
-  doc.fontSize(10).text(invoice.from?.name || '');
-  doc.text(invoice.from?.address || '');
-  doc.text(invoice.from?.email || '');
-  doc.moveDown();
-
-  doc.fontSize(12).text('To:');
-  doc.fontSize(10).text(invoice.to?.name || '');
-  doc.text(invoice.to?.address || '');
-  doc.text(invoice.to?.email || '');
-  doc.moveDown();
-
-  const tableTop = doc.y + 10;
-  doc.fontSize(10).text('Description', 50, tableTop);
-  doc.text('Qty', 300, tableTop);
-  doc.text('Price', 370, tableTop);
-  doc.text('Amount', 450, tableTop);
-  doc.moveTo(50, tableTop + 15).lineTo(550, tableTop + 15).stroke();
-
-  let y = tableTop + 25;
-  invoice.items.forEach((item) => {
-    const qty = Number(item.quantity) || 0;
-    const price = Number(item.price) || 0;
-    const amount = qty * price;
-    doc.text(item.description || '', 50, y, { width: 240 });
-    doc.text(String(qty), 300, y);
-    doc.text(price.toFixed(2), 370, y);
-    doc.text(amount.toFixed(2), 450, y);
-    y += 20;
-  });
-
-  doc.moveTo(50, y + 5).lineTo(550, y + 5).stroke();
-  y += 15;
-  doc.text(`Subtotal: ${subtotal.toFixed(2)}`, 370, y);
-  y += 15;
-  doc.text(`Tax (${invoice.taxRate || 0}%): ${tax.toFixed(2)}`, 370, y);
-  y += 15;
-  doc.fontSize(12).text(`Total: ${total.toFixed(2)}`, 370, y);
-
-  if (invoice.notes) {
-    doc.moveDown(2);
-    doc.fontSize(10).text('Notes:', 50);
-    doc.text(invoice.notes, 50);
+  if (isSendRateLimited(userId)) {
+    return res.status(429).json({ error: 'Send rate limit exceeded, try again later' });
   }
 
+  const recipient = invoice.to?.email;
+  if (!recipient || !EMAIL_REGEX.test(recipient)) {
+    return res.status(400).json({ error: 'Invoice recipient email is missing or invalid' });
+  }
+
+  const totals = computeTotals(invoice);
+  const doc = buildInvoicePdf(invoice, totals);
+  const pdfBufferPromise = collectPdfBuffer(doc);
   doc.end();
+  const pdfBuffer = await pdfBufferPromise;
+
+  const result = await sendInvoiceEmail({ to: recipient, invoice, totals, pdfBuffer });
+  recordSend(userId);
+
+  const index = invoices.findIndex((inv) => inv.id === invoice.id);
+  const updated = {
+    ...invoice,
+    deliveryStatus: result.outcome,
+    lastSentAt: new Date().toISOString(),
+    sendCount: invoice.sendCount + 1,
+    sendHistory: [
+      ...invoice.sendHistory,
+      {
+        timestamp: new Date().toISOString(),
+        outcome: result.outcome,
+        error: result.error,
+        triggeredBy: userId,
+      },
+    ],
+  };
+  invoices[index] = updated;
+  writeInvoices(invoices);
+
+  res.json({ ...updated, totals: computeTotals(updated) });
 });
 
 module.exports = router;

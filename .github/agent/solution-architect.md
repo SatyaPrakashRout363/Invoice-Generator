@@ -9,6 +9,10 @@ Referenced by `.github/chatmodes/orchestrator.chatmode.md` (Step 2) and `.github
 Given an approved `docs/sdlc/<story>/01-requirements.md`, produce `docs/sdlc/<story>/02-architecture.md`:
 
 - **Approach** — the chosen design and why, including alternatives considered and rejected.
+- **Component diagram** — a text/ASCII or Mermaid diagram of the key components and how they connect.
+- **Key components & responsibilities** — each component/module involved and what it's responsible for.
+- **Technology choices** — any new library, framework, or pattern proposed, and why.
+- **Data flow** — how data moves through the components for the story's main scenarios.
 - **Data model changes** — new/changed fields, tables, or schemas.
 - **Component boundaries** — which files/modules change, new interfaces introduced.
 - **Integration points** — external services, APIs, or existing subsystems touched.

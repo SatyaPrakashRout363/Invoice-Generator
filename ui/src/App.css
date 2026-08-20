@@ -23,6 +23,22 @@ header h1 {
   margin-bottom: 16px;
 }
 
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.app-header h1 {
+  margin-bottom: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .error-banner {
   background: #fef2f2;
   border: 1px solid #fca5a5;
@@ -30,6 +46,45 @@ header h1 {
   padding: 10px 14px;
   border-radius: 8px;
   margin-bottom: 16px;
+}
+
+.info-banner {
+  background: #ecfdf5;
+  border: 1px solid #6ee7b7;
+  color: #065f46;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.auth-app {
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: var(--muted);
+  gap: 4px;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0;
+  align-self: flex-start;
 }
 
 .layout {
@@ -202,6 +257,12 @@ button.primary:disabled {
   cursor: not-allowed;
 }
 
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
 .invoice-list {
   list-style: none;
   margin: 0;
@@ -240,6 +301,20 @@ button.primary:disabled {
 .muted {
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.delivery-status {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.delivery-status.status-sent {
+  color: #15803d;
+}
+
+.delivery-status.status-failed {
+  color: #b91c1c;
 }
 
 .empty {

@@ -1,2 +1,6 @@
 node_modules/
 *.log
+api/data/users.json
+api/data/resetTokens.json
+api/sessions/
+api/.env

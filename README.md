@@ -6,6 +6,7 @@
 ```
 cd api
 npm install
+cp .env.example .env   # then edit .env, see "Environment variables" below
 npm start        # http://localhost:4000
 ```
 
@@ -17,6 +18,34 @@ npm run dev       # http://localhost:5173
 ```
 
 The UI dev server proxies `/api/*` to the API on port 4000, so open http://localhost:5173 in your browser.
+
+## Environment variables
+
+Copy `api/.env.example` to `api/.env` and set:
+
+| Variable | Description |
+| --- | --- |
+| `SENDGRID_API_KEY` | API key for [SendGrid](https://sendgrid.com/), used to email invoices and password-reset links. Not required when `SEND_DRY_RUN=true`. |
+| `SENDER_EMAIL` | From-address used for all outgoing emails. |
+| `SENDER_NAME` | From-name used for all outgoing emails. |
+| `SESSION_SECRET` | Secret used to sign session cookies. Set this to a random string in any real deployment. |
+| `SEND_DRY_RUN` | When `true`, invoice-send and password-reset emails are simulated (logged, not actually sent) instead of calling SendGrid — useful for local development without a SendGrid account. |
+| `SESSION_MAX_AGE_DAYS` | How many days a login session stays valid before requiring re-login. |
+
+### Sessions
+
+Sessions are stored as files on disk under `api/sessions/` (via `session-file-store`), not in a database — no extra infrastructure to run locally. This directory is created automatically and is gitignored.
+
+### Creating a user account
+
+There is no self-service sign-up. To provision an account, run the CLI script from the `api` directory and follow the prompts for username/password:
+
+```
+cd api
+node scripts/create-user.js
+```
+
+This hashes the password and appends the account to `api/data/users.json`.
 
 ## MCP servers
 

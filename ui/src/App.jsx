@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { invoiceApi } from './api';
+import { invoiceApi, authApi, AuthError } from './api';
 import './App.css';
 
 const emptyItem = () => ({ description: '', quantity: 1, price: 0 });
@@ -19,21 +19,193 @@ function formatCurrency(value) {
   return Number(value || 0).toFixed(2);
 }
 
+async function withConfirmation(action) {
+  try {
+    return await action(false);
+  } catch (err) {
+    if (err.status === 409 && err.body?.error === 'confirmation_required') {
+      const proceed = window.confirm(
+        `This invoice has already been ${err.body.deliveryStatus.toLowerCase()}. Continue anyway?`
+      );
+      if (!proceed) return null;
+      return action(true);
+    }
+    throw err;
+  }
+}
+
+function LoginScreen({ onLoggedIn }) {
+  const [view, setView] = useState('login');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [forgotUsername, setForgotUsername] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetPassword, setResetPassword] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    try {
+      const user = await authApi.login(username, password);
+      onLoggedIn(user);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleForgot = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await authApi.forgotPassword(forgotUsername);
+      setMessage(res.message);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleReset = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await authApi.resetPassword(resetToken, resetPassword);
+      setMessage(res.message);
+      setResetToken('');
+      setResetPassword('');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const switchView = (next) => {
+    setView(next);
+    setError('');
+    setMessage('');
+  };
+
+  return (
+    <div className="app auth-app">
+      <header>
+        <h1>Invoice Generator</h1>
+      </header>
+
+      {error && <div className="error-banner">{error}</div>}
+      {message && <div className="info-banner">{message}</div>}
+
+      {view === 'login' && (
+        <form onSubmit={handleLogin} className="auth-form panel">
+          <h2>Log in</h2>
+          <label>
+            Username
+            <input required value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <label>
+            Password
+            <input
+              required
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="primary" disabled={submitting}>
+            {submitting ? 'Logging in…' : 'Log in'}
+          </button>
+          <button type="button" className="link-btn" onClick={() => switchView('forgot')}>
+            Forgot password?
+          </button>
+        </form>
+      )}
+
+      {view === 'forgot' && (
+        <form onSubmit={handleForgot} className="auth-form panel">
+          <h2>Forgot password</h2>
+          <label>
+            Username
+            <input
+              required
+              value={forgotUsername}
+              onChange={(e) => setForgotUsername(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="primary" disabled={submitting}>
+            {submitting ? 'Sending…' : 'Send reset email'}
+          </button>
+          <button type="button" className="link-btn" onClick={() => switchView('reset')}>
+            Have a reset token?
+          </button>
+          <button type="button" className="link-btn" onClick={() => switchView('login')}>
+            Back to login
+          </button>
+        </form>
+      )}
+
+      {view === 'reset' && (
+        <form onSubmit={handleReset} className="auth-form panel">
+          <h2>Reset password</h2>
+          <label>
+            Reset token
+            <input required value={resetToken} onChange={(e) => setResetToken(e.target.value)} />
+          </label>
+          <label>
+            New password
+            <input
+              required
+              type="password"
+              value={resetPassword}
+              onChange={(e) => setResetPassword(e.target.value)}
+            />
+          </label>
+          <button type="submit" className="primary" disabled={submitting}>
+            {submitting ? 'Resetting…' : 'Reset password'}
+          </button>
+          <button type="button" className="link-btn" onClick={() => switchView('login')}>
+            Back to login
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
+  const [authState, setAuthState] = useState('loading');
+  const [currentUser, setCurrentUser] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [form, setForm] = useState(emptyForm());
+  const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [sendingId, setSendingId] = useState(null);
 
   const loadInvoices = async () => {
     setLoading(true);
     try {
       const data = await invoiceApi.list();
       setInvoices(data);
+      setAuthState('authenticated');
       setError('');
     } catch (err) {
-      setError(err.message);
+      if (err instanceof AuthError) {
+        setAuthState('login');
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -42,6 +214,25 @@ export default function App() {
   useEffect(() => {
     loadInvoices();
   }, []);
+
+  if (authState === 'loading' && loading) {
+    return (
+      <div className="app">
+        <p>Loading…</p>
+      </div>
+    );
+  }
+
+  if (authState === 'login') {
+    return (
+      <LoginScreen
+        onLoggedIn={(user) => {
+          setCurrentUser(user);
+          loadInvoices();
+        }}
+      />
+    );
+  }
 
   const updateParty = (party, field, value) => {
     setForm((prev) => ({ ...prev, [party]: { ...prev[party], [field]: value } }));
@@ -68,41 +259,114 @@ export default function App() {
   const tax = subtotal * ((Number(form.taxRate) || 0) / 100);
   const total = subtotal + tax;
 
+  const handleEdit = (inv) => {
+    setEditingId(inv.id);
+    setForm({
+      invoiceNumber: inv.invoiceNumber,
+      date: inv.date,
+      dueDate: inv.dueDate || '',
+      from: inv.from || { name: '', address: '', email: '' },
+      to: inv.to || { name: '', address: '', email: '' },
+      items: inv.items?.length ? inv.items : [emptyItem()],
+      taxRate: inv.taxRate || 0,
+      notes: inv.notes || '',
+    });
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
+    setForm(emptyForm());
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setError('');
     try {
-      await invoiceApi.create(form);
+      if (editingId) {
+        const result = await withConfirmation((confirm) =>
+          invoiceApi.update(editingId, { ...form, confirm })
+        );
+        if (result === null) return;
+        setEditingId(null);
+      } else {
+        await invoiceApi.create(form);
+      }
       setForm(emptyForm());
       await loadInvoices();
     } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthState('login');
+        return;
+      }
       setError(err.message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (inv) => {
     try {
-      await invoiceApi.remove(id);
+      const result = await withConfirmation((confirm) => invoiceApi.remove(inv.id, { confirm }));
+      if (result === null) return;
+      if (editingId === inv.id) handleCancelEdit();
       await loadInvoices();
     } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthState('login');
+        return;
+      }
       setError(err.message);
     }
   };
 
+  const handleSend = async (inv) => {
+    setSendingId(inv.id);
+    setError('');
+    try {
+      await invoiceApi.send(inv.id);
+      await loadInvoices();
+    } catch (err) {
+      if (err instanceof AuthError) {
+        setAuthState('login');
+        return;
+      }
+      setError(err.message);
+    } finally {
+      setSendingId(null);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore logout errors, fall through to reset local state anyway
+    }
+    setCurrentUser(null);
+    setInvoices([]);
+    setForm(emptyForm());
+    setEditingId(null);
+    setAuthState('login');
+  };
+
   return (
     <div className="app">
-      <header>
+      <header className="app-header">
         <h1>Invoice Generator</h1>
+        <div className="header-actions">
+          {currentUser && <span className="muted">{currentUser.username}</span>}
+          <button type="button" className="secondary" onClick={handleLogout}>
+            Log out
+          </button>
+        </div>
       </header>
 
       {error && <div className="error-banner">{error}</div>}
 
       <div className="layout">
         <section className="panel">
-          <h2>New Invoice</h2>
+          <h2>{editingId ? 'Edit Invoice' : 'New Invoice'}</h2>
           <form onSubmit={handleSubmit} className="invoice-form">
             <div className="form-row">
               <label>
@@ -243,9 +507,16 @@ export default function App() {
               <div className="grand-total">Total: {formatCurrency(total)}</div>
             </div>
 
-            <button type="submit" className="primary" disabled={submitting}>
-              {submitting ? 'Saving…' : 'Save Invoice'}
-            </button>
+            <div className="form-actions">
+              <button type="submit" className="primary" disabled={submitting}>
+                {submitting ? 'Saving…' : editingId ? 'Save Changes' : 'Save Invoice'}
+              </button>
+              {editingId && (
+                <button type="button" className="secondary" onClick={handleCancelEdit}>
+                  Cancel
+                </button>
+              )}
+            </div>
           </form>
         </section>
 
@@ -264,13 +535,31 @@ export default function App() {
                     <div className="muted">
                       {inv.to?.name || 'Unnamed client'} · {inv.date}
                     </div>
+                    <div className={`delivery-status status-${inv.deliveryStatus?.replace(/\s+/g, '-').toLowerCase()}`}>
+                      {inv.deliveryStatus || 'Not Sent'}
+                      {inv.lastSentAt && ` · last sent ${new Date(inv.lastSentAt).toLocaleString()}`}
+                    </div>
                   </div>
                   <div className="invoice-card-total">{formatCurrency(inv.totals?.total)}</div>
                   <div className="invoice-card-actions">
                     <a href={invoiceApi.pdfUrl(inv.id)} target="_blank" rel="noreferrer">
                       PDF
                     </a>
-                    <button className="icon-btn" onClick={() => handleDelete(inv.id)}>
+                    <button
+                      className="icon-btn"
+                      onClick={() => handleSend(inv)}
+                      disabled={sendingId === inv.id}
+                    >
+                      {sendingId === inv.id
+                        ? 'Sending…'
+                        : inv.deliveryStatus === 'Sent'
+                        ? 'Resend'
+                        : 'Send'}
+                    </button>
+                    <button className="icon-btn" onClick={() => handleEdit(inv)}>
+                      Edit
+                    </button>
+                    <button className="icon-btn" onClick={() => handleDelete(inv)}>
                       Delete
                     </button>
                   </div>

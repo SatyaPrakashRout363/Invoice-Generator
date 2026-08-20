@@ -14,4 +14,4 @@ Read `01-requirements.md` and `02-architecture.md`, then write `docs/sdlc/<story
 - **Simplicity** — is there a simpler design that meets the same requirements? Don't let complexity pass unchallenged.
 - **Verdict** — approve as-is, approve with listed changes, or send back to Step 2 with specific reasons.
 
-Be genuinely critical — a design review that raises no concerns is only credible if the design actually has none. Stop after writing the file and wait for human sign-off before Step 4 (Implementation Planning) starts.
+If any issue is found, update `02-architecture.md` itself to reflect the agreed fix — `03-design-review.md` records the finding and decision, `02-architecture.md` stays the current source of truth for the design. Be genuinely critical — a design review that raises no concerns is only credible if the design actually has none. Stop after writing the file and wait for human sign-off before Step 4 (Implementation Planning) starts.

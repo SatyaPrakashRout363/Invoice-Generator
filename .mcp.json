@@ -9,8 +9,8 @@
       "args": ["mcp-atlassian"],
       "env": {
         "JIRA_URL": "https://jiraeu.epam.com/secure/Dashboard.jspa",
-        "JIRA_USERNAME": "satyaprakash_rout@epam.com",
-        "JIRA_API_TOKEN": "LbrReXGdeVNtBlx5F6Os7bUVq3mUVJbu0OC8hy"
+        "JIRA_USERNAME": "${JIRA_USERNAME}",
+        "JIRA_API_TOKEN": "${JIRA_PASSWORD}"
       }
     }
   }

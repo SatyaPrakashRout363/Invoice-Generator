@@ -1,6 +1,6 @@
-# Active-story docs (Claude Code convention)
+# Active-story docs (flat single-story convention)
 
-This folder holds a flat, single-active-story snapshot of the same SDLC artifacts that live per-story under [`docs/sdlc/`](sdlc/README.md), driven by the `.claude/agents/` + `.claude/skills/` scaffolding instead of the GitHub Copilot prompts/chatmode. The two conventions are independent — this one exists for Claude Code sessions that work through `.claude/agents`, the other for Copilot Chat sessions.
+This folder holds a flat, single-active-story snapshot of the same SDLC artifacts that live per-story under [`docs/sdlc/`](sdlc/README.md), driven by the `.github/agent/` + `.github/skill/` reference scaffolding described in [`.github/copilot-instructions.md`](../.github/copilot-instructions.md). The two conventions are independent — this one is a flat working snapshot of whichever story is currently active, the other is the durable per-story archive.
 
 ```
 docs/
@@ -20,13 +20,13 @@ The files above currently reflect **EPMCDME-14102** (invoice email delivery, ses
 
 ## Pipeline
 
-1. **Requirements** — `requirements-analyst` agent + `requirements-analysis` skill → `requirements.md`
-2. **Architecture** — `solution-architect` agent + `architecture-design` skill → `architecture.md`
-3. **Design Review** — `design-reviewer` agent → `design-review.md`
-4. **Implementation Planning** — `implementation-planner` agent → `impl-plan.md`
-5. **Implementation** — `implementation-engineer` agent (code diff is the output; no doc)
-6. **Code Review** — `quality-release-engineer` agent + `code-review` skill → `code-review.md`
-7. **Verification** — `quality-release-engineer` agent + `test-execution` skill → `verification.md`
-8. **PR** — `quality-release-engineer` agent + `github-pr` skill, only after explicit sign-off on 6 and 7
+1. **Requirements** — `.github/agent/requirements-analyst.md` + `.github/skill/requirements-analysis.md` → `requirements.md`
+2. **Architecture** — `.github/agent/solution-architect.md` + `.github/skill/architecture-design.md` → `architecture.md`
+3. **Design Review** — `.github/agent/design-reviewer.md` → `design-review.md`
+4. **Implementation Planning** — `.github/agent/implementation-planner.md` → `impl-plan.md`
+5. **Implementation** — `.github/agent/implementation-engineer.md` (code diff is the output; no doc)
+6. **Code Review** — `.github/agent/quality-release-engineer.md` + `.github/skill/code-review.md` → `code-review.md`
+7. **Verification** — `.github/agent/quality-release-engineer.md` + `.github/skill/test-execution.md` → `verification.md`
+8. **PR** — `.github/agent/quality-release-engineer.md` + `.github/skill/github-pr.md`, only after explicit sign-off on 6 and 7 (per `.github/hooks/pre-pr-signoff.md`)
 
 Note: the reference structure this was modeled from used a `gitlab-mr` skill; since this repo is hosted on GitHub, it's named `github-pr` here and uses `gh pr create` instead of `glab mr create`.
